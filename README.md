@@ -1,5 +1,9 @@
 # apple-mail-mcp
 
+[![CI](https://github.com/maximbilan/apple-mail-mcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/maximbilan/apple-mail-mcp-go/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/maximbilan/apple-mail-mcp-go)](https://github.com/maximbilan/apple-mail-mcp-go/releases)
+[![License](https://img.shields.io/github/license/maximbilan/apple-mail-mcp-go)](LICENSE)
+
 `apple-mail-mcp` is a Go Model Context Protocol (MCP) server for macOS that gives MCP-compatible assistants programmatic access to Mail.app for listing accounts/mailboxes, searching and reading messages, sending drafts/emails, and unread-count workflows.
 
 ## Prerequisites
@@ -12,12 +16,12 @@
 
 ### 1. One-click for Claude Desktop
 
-Download `apple-mail-mcp.mcpb` from the [latest release](https://github.com/<owner>/apple-mail-mcp/releases/latest) and double-click it. Claude Desktop installs and registers the server automatically.
+Download `apple-mail-mcp.mcpb` from the [latest release](https://github.com/maximbilan/apple-mail-mcp-go/releases/latest) and double-click it. Claude Desktop installs and registers the server automatically.
 
 ### 2. One-line install (recommended for Claude Code or both clients)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<owner>/apple-mail-mcp/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/maximbilan/apple-mail-mcp-go/main/install.sh | sh
 ```
 
 This installer:
@@ -28,7 +32,7 @@ This installer:
 ### 3. Build from source (Go developers)
 
 ```sh
-go install github.com/<owner>/apple-mail-mcp/cmd/apple-mail-mcp@latest
+go install github.com/maximbilan/apple-mail-mcp-go/cmd/apple-mail-mcp@latest
 apple-mail-mcp install
 ```
 
@@ -98,6 +102,11 @@ Read-only mode (write tools hidden):
 apple-mail-mcp --read-only
 ```
 
+## Known Limitations
+
+- Some Mail messages can have missing/malformed date metadata. `search_messages` falls back from `date sent` to `date received`, and date can be empty when unavailable.
+- Gmail label model can surface `All Mail` semantics. `search_messages` mailbox output reflects the mailbox requested in the query (for example `INBOX`) to avoid confusion.
+
 ## Integration Tests
 
 Integration tests require Mail.app on macOS and explicit build tag:
@@ -116,6 +125,24 @@ go test ./tests/integration -tags=integration -v
   - Increase timeout with `APPLE_MAIL_MCP_TIMEOUT` (e.g. `45s` or `60`).
 - Config did not update:
   - Restart Claude Desktop and run `claude mcp list` for Claude Code.
+
+## Release Validation Checklist
+
+Before creating a public release:
+
+```sh
+go build ./...
+go vet ./...
+go test ./... -race
+```
+
+Install path smoke checks:
+
+```sh
+./install.sh
+apple-mail-mcp install --yes
+apple-mail-mcp uninstall --yes
+```
 
 ## Uninstall
 

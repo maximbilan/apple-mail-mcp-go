@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/maximbilan/apple-mail-mcp/internal/mail"
+	"github.com/maximbilan/apple-mail-mcp-go/internal/mail"
 )
 
 func TestListAccountsIntegration(t *testing.T) {

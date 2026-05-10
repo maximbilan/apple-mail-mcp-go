@@ -1,4 +1,4 @@
-module github.com/maximbilan/apple-mail-mcp
+module github.com/maximbilan/apple-mail-mcp-go
 
 go 1.25.0
 
