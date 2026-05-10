@@ -95,6 +95,25 @@ func TestSearchMessagesHandlerParsesDatesAndDefaults(t *testing.T) {
 	if fake.lastSearchQuery.DateFrom == nil || fake.lastSearchQuery.DateTo == nil {
 		t.Fatalf("expected parsed dates to be set")
 	}
+	if out.Messages[0].Date == "" {
+		t.Fatalf("expected RFC3339 date output, got empty")
+	}
+}
+
+func TestSearchMessagesHandlerReturnsEmptyDateForZeroTime(t *testing.T) {
+	fake := &fakeMailClient{searchResults: []mail.MessageSummary{{ID: "1"}}}
+	h := newSearchMessagesHandler(fake, testLogger())
+
+	_, out, err := h(context.Background(), nil, searchMessagesInput{Account: "Personal"})
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if len(out.Messages) != 1 {
+		t.Fatalf("unexpected output: %#v", out)
+	}
+	if out.Messages[0].Date != "" {
+		t.Fatalf("expected empty date for zero time, got %q", out.Messages[0].Date)
+	}
 }
 
 func TestSearchMessagesHandlerRejectsInvalidDate(t *testing.T) {

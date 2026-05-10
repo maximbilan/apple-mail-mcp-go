@@ -26,12 +26,12 @@ type searchMessagesOutput struct {
 }
 
 type searchMessageRow struct {
-	ID      string    `json:"id"`
-	Subject string    `json:"subject"`
-	Sender  string    `json:"sender"`
-	Date    time.Time `json:"date"`
-	Read    bool      `json:"read"`
-	Mailbox string    `json:"mailbox"`
+	ID      string `json:"id"`
+	Subject string `json:"subject"`
+	Sender  string `json:"sender"`
+	Date    string `json:"date"`
+	Read    bool   `json:"read"`
+	Mailbox string `json:"mailbox"`
 }
 
 type getMessageInput struct {
@@ -95,13 +95,20 @@ func newSearchMessagesHandler(client MailClient, logger *slog.Logger) func(conte
 				ID:      msg.ID,
 				Subject: msg.Subject,
 				Sender:  msg.Sender,
-				Date:    msg.Date,
+				Date:    formatRFC3339OrEmpty(msg.Date),
 				Read:    msg.Read,
 				Mailbox: msg.Mailbox,
 			})
 		}
 		return nil, searchMessagesOutput{Messages: out}, nil
 	}
+}
+
+func formatRFC3339OrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 func newGetMessageHandler(client MailClient, logger *slog.Logger) func(context.Context, *mcp.CallToolRequest, getMessageInput) (*mcp.CallToolResult, getMessageOutput, error) {
