@@ -142,6 +142,10 @@ func buildSearchMessagesScript(q SearchQuery) string {
 	if len(filters) > 0 {
 		whereClause = " whose " + strings.Join(filters, " and ")
 	}
+	messageQuery := "messages of targetMailbox"
+	if whereClause != "" {
+		messageQuery = "every message of targetMailbox" + whereClause
+	}
 
 	return asPrelude() + fmt.Sprintf(strings.TrimSpace(`
 set accountName to %s
@@ -157,18 +161,43 @@ tell application "Mail"
 	if not (exists account accountName) then
 		error "account_not_found:" & accountName
 	end if
-	if not (exists mailbox mailboxName of account accountName) then
+	set acc to account accountName
+	set targetMailbox to missing value
+	if targetMailbox is missing value then
+		ignoring case
+			if mailboxName is "inbox" then
+				try
+					set targetMailbox to inbox of acc
+				end try
+			end if
+		end ignoring
+	end if
+	if targetMailbox is missing value then
+		try
+			set targetMailbox to mailbox mailboxName of acc
+		end try
+	end if
+	if targetMailbox is missing value then
+		repeat with mb in every mailbox of acc
+			try
+				set mbName to (name of mb as text)
+				ignoring case
+					if (mbName is mailboxName) or (mbName contains mailboxName) or (mailboxName contains mbName) then
+						set targetMailbox to mb
+						exit repeat
+					end if
+				end ignoring
+			end try
+		end repeat
+	end if
+	if targetMailbox is missing value then
 		error "mailbox_not_found:" & mailboxName
 	end if
-	set targetMailbox to mailbox mailboxName of account accountName
-	set matches to (every message of targetMailbox%s)
 	set rows to {}
-	set totalCount to count of matches
-	if totalCount > 0 then
-		set maxIndex to maxResults
-		if totalCount < maxIndex then set maxIndex to totalCount
-		repeat with i from 1 to maxIndex
-			set msg to item i of matches
+	set collectedCount to 0
+	repeat with msg in (%s)
+		if collectedCount >= maxResults then exit repeat
+		try
 			set unixDate to ""
 			try
 				set sentDate to date sent of msg
@@ -188,8 +217,9 @@ tell application "Mail"
 			end if
 			set row to (id of msg as text) & fieldSep & (subject of msg as text) & fieldSep & (sender of msg as text) & fieldSep & unixDate & fieldSep & ((read status of msg) as text) & fieldSep & mailboxName
 			set end of rows to row
-		end repeat
-	end if
+			set collectedCount to collectedCount + 1
+		end try
+	end repeat
 end tell
 if (count of rows) is 0 then
 	return ""
@@ -200,24 +230,92 @@ repeat with i from 1 to (count of rows)
 	set outText to outText & (item i of rows as text)
 end repeat
 return outText
-`), quoteAS(q.Account), quoteAS(mailbox), limit, whereClause)
+`), quoteAS(q.Account), quoteAS(mailbox), limit, messageQuery)
 }
 
-func buildGetMessageScript(messageID string, includeBody bool) string {
-	bodyExpr := `""`
+func buildGetMessageScript(messageID, account, mailbox string, includeBody bool) string {
+	includeBodyValue := "false"
 	if includeBody {
-		bodyExpr = "(content of msg as text)"
+		includeBodyValue = "true"
 	}
 	return asPrelude() + fmt.Sprintf(strings.TrimSpace(`
 set messageIDText to %s
 set messageIDNum to (messageIDText as integer)
+set includeBody to %s
+set accountName to %s
+set mailboxName to %s
 
 tell application "Mail"
-	set matches to (every message whose id is messageIDNum)
-	if (count of matches) is 0 then
+	set msg to missing value
+	if accountName is not "" then
+		if exists account accountName then
+			set accountList to {account accountName}
+		else
+			set accountList to {}
+		end if
+	else
+		set accountList to every account
+	end if
+
+	repeat with acc in accountList
+		if mailboxName is not "" then
+			set candidateMailboxes to {}
+			try
+				set end of candidateMailboxes to (mailbox mailboxName of acc)
+			end try
+			if (count of candidateMailboxes) is 0 then
+				repeat with mb in every mailbox of acc
+					try
+						set mbName to (name of mb as text)
+						ignoring case
+							if (mbName is mailboxName) or (mbName contains mailboxName) or (mailboxName contains mbName) then
+								set end of candidateMailboxes to mb
+								exit repeat
+							end if
+						end ignoring
+					end try
+				end repeat
+			end if
+			repeat with mb in candidateMailboxes
+				try
+					set matches to (every message of mb whose id is messageIDNum)
+				on error
+					set matches to {}
+				end try
+				if (count of matches) > 0 then
+					set msg to item 1 of matches
+					exit repeat
+				end if
+			end repeat
+		else
+			try
+				set inboxMatches to (every message of inbox of acc whose id is messageIDNum)
+			on error
+				set inboxMatches to {}
+			end try
+			if (count of inboxMatches) > 0 then
+				set msg to item 1 of inboxMatches
+			else
+				repeat with mb in every mailbox of acc
+					try
+						set matches to (every message of mb whose id is messageIDNum)
+					on error
+						set matches to {}
+					end try
+					if (count of matches) > 0 then
+						set msg to item 1 of matches
+						exit repeat
+					end if
+				end repeat
+			end if
+		end if
+		if msg is not missing value then
+			exit repeat
+		end if
+	end repeat
+	if msg is missing value then
 		error "message_not_found:" & messageIDText
 	end if
-	set msg to item 1 of matches
 	set epochDate to current date
 	set year of epochDate to 1970
 	set month of epochDate to 1
@@ -228,10 +326,32 @@ tell application "Mail"
 	set msgID to (id of msg as text)
 	set msgSubject to (subject of msg as text)
 	set msgSender to (sender of msg as text)
-	set msgUnixDate to (((date sent of msg) - epochDate) as integer) as text
+	set msgUnixDate to ""
+	try
+		set sentDate to date sent of msg
+		if sentDate is not missing value then
+			set msgUnixDate to (((sentDate - epochDate) as integer) as text)
+		end if
+	end try
+	if msgUnixDate is "" then
+		try
+			set recvDate to date received of msg
+			if recvDate is not missing value then
+				set msgUnixDate to (((recvDate - epochDate) as integer) as text)
+			end if
+		end try
+	end if
 	set msgMailbox to (name of mailbox of msg as text)
 	set msgRead to ((read status of msg) as text)
 	set msgFlagged to ((flagged status of msg) as text)
+	set msgBody to ""
+	if includeBody then
+		try
+			set msgBody to (content of msg as text)
+		on error
+			set msgBody to ""
+		end try
+	end if
 end tell
 if (count of recipList) is 0 then
 	set recips to ""
@@ -251,9 +371,9 @@ else
 		set ccRecips to ccRecips & (item i of ccList as text)
 	end repeat
 end if
-set row to msgID & fieldSep & msgSubject & fieldSep & msgSender & fieldSep & recips & fieldSep & ccRecips & fieldSep & msgUnixDate & fieldSep & %s & fieldSep & msgMailbox & fieldSep & msgRead & fieldSep & msgFlagged
+set row to msgID & fieldSep & msgSubject & fieldSep & msgSender & fieldSep & recips & fieldSep & ccRecips & fieldSep & msgUnixDate & fieldSep & msgBody & fieldSep & msgMailbox & fieldSep & msgRead & fieldSep & msgFlagged
 return row
-`), quoteAS(messageID), bodyExpr)
+`), quoteAS(messageID), includeBodyValue, quoteAS(account), quoteAS(mailbox))
 }
 
 func buildSendOrDraftScript(input ComposeInput, draft bool) string {
@@ -311,10 +431,18 @@ set updatedCount to 0
 tell application "Mail"
 	repeat with idText in idList
 		set idNum to (idText as integer)
-		set matches to (every message whose id is idNum)
-		repeat with msg in matches
-			set read status of msg to readValue
-			set updatedCount to updatedCount + 1
+		repeat with acc in every account
+			repeat with mb in every mailbox of acc
+				try
+					set matches to (every message of mb whose id is idNum)
+				on error
+					set matches to {}
+				end try
+				repeat with msg in matches
+					set read status of msg to readValue
+					set updatedCount to updatedCount + 1
+				end repeat
+			end repeat
 		end repeat
 	end repeat
 	return updatedCount as text

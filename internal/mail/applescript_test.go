@@ -57,9 +57,13 @@ func TestBuildSearchMessagesScriptIncludesFilters(t *testing.T) {
 		`subject of it contains "invoice"`,
 		`read status of it is false`,
 		`every message of targetMailbox whose`,
+		`repeat with msg in (every message of targetMailbox whose`,
+		`set targetMailbox to missing value`,
+		`repeat with mb in every mailbox of acc`,
+		`(mbName contains mailboxName) or (mailboxName contains mbName)`,
 		`set row to (id of msg as text)`,
 		`& fieldSep & mailboxName`,
-		`repeat with i from 1 to (count of rows)`,
+		`set collectedCount to collectedCount + 1`,
 		`return outText`,
 	}
 	for _, c := range checks {
@@ -88,5 +92,33 @@ func TestBuildSendOrDraftScriptUsesLinefeedConcatenation(t *testing.T) {
 	}
 	if !strings.Contains(script, "send newMessage") {
 		t.Fatalf("script should send message")
+	}
+}
+
+func TestBuildGetMessageScriptReadsBodyInsideTell(t *testing.T) {
+	script := buildGetMessageScript("123", "Personal", "INBOX", true)
+	if !strings.Contains(script, `set includeBody to true`) {
+		t.Fatalf("expected includeBody toggle in script")
+	}
+	if !strings.Contains(script, `set accountName to "Personal"`) {
+		t.Fatalf("expected account hint in script")
+	}
+	if !strings.Contains(script, `set mailboxName to "INBOX"`) {
+		t.Fatalf("expected mailbox hint in script")
+	}
+	if !strings.Contains(script, `set msgBody to (content of msg as text)`) {
+		t.Fatalf("expected body extraction inside Mail tell block")
+	}
+	if !strings.Contains(script, `set matches to (every message of mb whose id is messageIDNum)`) {
+		t.Fatalf("expected mailbox-scoped lookup for message id")
+	}
+	if strings.Contains(script, `set matches to (every message whose id is messageIDNum)`) {
+		t.Fatalf("unexpected global message-id lookup")
+	}
+	if strings.Contains(script, `& (content of msg as text) &`) {
+		t.Fatalf("body must not be read inline outside tell block")
+	}
+	if !strings.Contains(script, `& fieldSep & msgBody & fieldSep &`) {
+		t.Fatalf("expected final row to include msgBody variable")
 	}
 }

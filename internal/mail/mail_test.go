@@ -55,7 +55,7 @@ func TestSearchMessagesParsesRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SearchMessages error: %v", err)
 	}
-	if len(msgs) != 1 || msgs[0].ID != "1" || msgs[0].Read {
+	if len(msgs) != 1 || msgs[0].ID != encodeMessageRef("Personal", "INBOX", "1") || msgs[0].Read {
 		t.Fatalf("unexpected messages: %#v", msgs)
 	}
 	if msgs[0].Date.IsZero() {
@@ -89,7 +89,7 @@ func TestSearchMessagesFallsBackWhenDateSentFails(t *testing.T) {
 	if calls != 2 {
 		t.Fatalf("expected two script calls, got %d", calls)
 	}
-	if len(msgs) != 1 || msgs[0].ID != "1" {
+	if len(msgs) != 1 || msgs[0].ID != encodeMessageRef("Personal", "INBOX", "1") {
 		t.Fatalf("unexpected filtered fallback messages: %#v", msgs)
 	}
 }
@@ -138,7 +138,9 @@ func TestMarkAsReadValidationAndParse(t *testing.T) {
 	c := newTestClient(func(ctx context.Context, script string) (string, error) {
 		return "3", nil
 	})
-	count, err := c.MarkAsRead(context.Background(), []string{"1", "2"}, true)
+	id1 := encodeMessageRef("Personal", "INBOX", "1")
+	id2 := encodeMessageRef("Personal", "INBOX", "2")
+	count, err := c.MarkAsRead(context.Background(), []string{id1, id2}, true)
 	if err != nil {
 		t.Fatalf("MarkAsRead error: %v", err)
 	}
@@ -147,6 +149,23 @@ func TestMarkAsReadValidationAndParse(t *testing.T) {
 	}
 	if _, err := c.MarkAsRead(context.Background(), []string{}, true); err == nil {
 		t.Fatal("expected empty ids error")
+	}
+}
+
+func TestDecodeMessageRef(t *testing.T) {
+	ref, err := decodeMessageRef(encodeMessageRef("Google", "INBOX", "42"))
+	if err != nil {
+		t.Fatalf("decodeMessageRef error: %v", err)
+	}
+	if ref.Account != "Google" || ref.Mailbox != "INBOX" || ref.NumericID != "42" {
+		t.Fatalf("unexpected decoded ref: %#v", ref)
+	}
+	legacy, err := decodeMessageRef("7")
+	if err != nil {
+		t.Fatalf("legacy decode error: %v", err)
+	}
+	if legacy.NumericID != "7" {
+		t.Fatalf("unexpected legacy decode: %#v", legacy)
 	}
 }
 

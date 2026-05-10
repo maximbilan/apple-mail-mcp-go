@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,14 @@ import (
 )
 
 var emailRegex = regexp.MustCompile(`^[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$`)
+
+const messageRefPrefix = "mref:"
+
+type messageRef struct {
+	Account   string
+	Mailbox   string
+	NumericID string
+}
 
 type Client struct {
 	runner ScriptRunner
@@ -113,27 +122,35 @@ func (c *Client) SearchMessages(ctx context.Context, q SearchQuery) ([]MessageSu
 			if errFallback != nil {
 				return nil, err
 			}
-			msgs := parseSearchMessages(rawFallback)
-			msgs = filterMessagesByDate(msgs, q.DateFrom, q.DateTo)
-			if len(msgs) > q.Limit {
-				msgs = msgs[:q.Limit]
-			}
-			return msgs, nil
+				msgs := parseSearchMessages(rawFallback)
+				for i := range msgs {
+					msgs[i].ID = encodeMessageRef(q.Account, msgs[i].Mailbox, msgs[i].ID)
+				}
+				msgs = filterMessagesByDate(msgs, q.DateFrom, q.DateTo)
+				if len(msgs) > q.Limit {
+					msgs = msgs[:q.Limit]
+				}
+				return msgs, nil
 		}
 		return nil, err
 	}
-	return parseSearchMessages(raw), nil
+	msgs := parseSearchMessages(raw)
+	for i := range msgs {
+		msgs[i].ID = encodeMessageRef(q.Account, msgs[i].Mailbox, msgs[i].ID)
+	}
+	return msgs, nil
 }
 
 func (c *Client) GetMessage(ctx context.Context, messageID string, includeBody bool) (Message, error) {
 	if strings.TrimSpace(messageID) == "" {
 		return Message{}, errors.New("message_id is required")
 	}
-	if _, err := strconv.Atoi(messageID); err != nil {
-		return Message{}, errors.New("message_id must be an integer string")
+	ref, err := decodeMessageRef(messageID)
+	if err != nil {
+		return Message{}, err
 	}
 
-	raw, err := c.runScript(ctx, buildGetMessageScript(messageID, includeBody))
+	raw, err := c.runScript(ctx, buildGetMessageScript(ref.NumericID, ref.Account, ref.Mailbox, includeBody))
 	if err != nil {
 		return Message{}, err
 	}
@@ -141,8 +158,12 @@ func (c *Client) GetMessage(ctx context.Context, messageID string, includeBody b
 	if len(parts) != 10 {
 		return Message{}, fmt.Errorf("unexpected get_message payload format")
 	}
+	messageOutID := parts[0]
+	if strings.TrimSpace(ref.Account) != "" {
+		messageOutID = encodeMessageRef(ref.Account, parts[7], parts[0])
+	}
 	return Message{
-		ID:         parts[0],
+		ID:         messageOutID,
 		Subject:    parts[1],
 		Sender:     parts[2],
 		Recipients: splitNonEmpty(parts[3], ListSep),
@@ -176,12 +197,15 @@ func (c *Client) MarkAsRead(ctx context.Context, messageIDs []string, read bool)
 	if len(messageIDs) > 100 {
 		return 0, errors.New("message_ids exceeds max of 100")
 	}
+	decoded := make([]string, 0, len(messageIDs))
 	for _, id := range messageIDs {
-		if _, err := strconv.Atoi(id); err != nil {
-			return 0, fmt.Errorf("invalid message id %q: must be an integer string", id)
+		ref, err := decodeMessageRef(id)
+		if err != nil {
+			return 0, err
 		}
+		decoded = append(decoded, ref.NumericID)
 	}
-	raw, err := c.runScript(ctx, buildMarkAsReadScript(messageIDs, read))
+	raw, err := c.runScript(ctx, buildMarkAsReadScript(decoded, read))
 	if err != nil {
 		return 0, err
 	}
@@ -190,6 +214,46 @@ func (c *Client) MarkAsRead(ctx context.Context, messageIDs []string, read bool)
 		return 0, fmt.Errorf("invalid mark_as_read response: %w", err)
 	}
 	return count, nil
+}
+
+func encodeMessageRef(account, mailbox, numericID string) string {
+	account = strings.TrimSpace(account)
+	mailbox = strings.TrimSpace(mailbox)
+	numericID = strings.TrimSpace(numericID)
+	if account == "" || mailbox == "" || numericID == "" {
+		return numericID
+	}
+	return messageRefPrefix + url.QueryEscape(account) + ":" + url.QueryEscape(mailbox) + ":" + numericID
+}
+
+func decodeMessageRef(value string) (messageRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return messageRef{}, errors.New("message_id is required")
+	}
+	if strings.HasPrefix(value, messageRefPrefix) {
+		parts := strings.SplitN(strings.TrimPrefix(value, messageRefPrefix), ":", 3)
+		if len(parts) != 3 {
+			return messageRef{}, fmt.Errorf("invalid message_id %q", value)
+		}
+		account, err := url.QueryUnescape(parts[0])
+		if err != nil {
+			return messageRef{}, fmt.Errorf("invalid message_id account component: %w", err)
+		}
+		mailbox, err := url.QueryUnescape(parts[1])
+		if err != nil {
+			return messageRef{}, fmt.Errorf("invalid message_id mailbox component: %w", err)
+		}
+		numericID := strings.TrimSpace(parts[2])
+		if _, err := strconv.Atoi(numericID); err != nil {
+			return messageRef{}, errors.New("message_id must contain a numeric id")
+		}
+		return messageRef{Account: account, Mailbox: mailbox, NumericID: numericID}, nil
+	}
+	if _, err := strconv.Atoi(value); err != nil {
+		return messageRef{}, errors.New("message_id must be an integer string")
+	}
+	return messageRef{NumericID: value}, nil
 }
 
 func (c *Client) GetUnreadCount(ctx context.Context, account string) (UnreadCounts, error) {
@@ -222,6 +286,14 @@ func (c *Client) runScript(ctx context.Context, script string) (string, error) {
 	if err == nil {
 		return out, nil
 	}
+	if isTimeoutErr(err) {
+		c.logger.Warn("apple script timeout, retrying once", slog.String("error", err.Error()))
+		retryOut, retryErr := c.runner.Run(ctx, script)
+		if retryErr == nil {
+			return retryOut, nil
+		}
+		err = retryErr
+	}
 	var execErr *ExecError
 	if errors.As(err, &execErr) {
 		truncated := execErr.Script
@@ -235,6 +307,13 @@ func (c *Client) runScript(ctx context.Context, script string) (string, error) {
 		)
 	}
 	return "", err
+}
+
+func isTimeoutErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "timeout")
 }
 
 func splitNonEmpty(s, sep string) []string {
