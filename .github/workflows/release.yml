@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build darwin binaries
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/apple-mail-mcp-darwin-arm64 ./cmd/apple-mail-mcp
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/apple-mail-mcp-darwin-amd64 ./cmd/apple-mail-mcp
+          lipo -create -output dist/apple-mail-mcp-darwin-universal dist/apple-mail-mcp-darwin-arm64 dist/apple-mail-mcp-darwin-amd64
+
+      - name: Generate checksums
+        run: |
+          set -euxo pipefail
+          cd dist
+          shasum -a 256 apple-mail-mcp-darwin-arm64 apple-mail-mcp-darwin-amd64 apple-mail-mcp-darwin-universal > SHA256SUMS
+
+      - name: Build MCPB bundle
+        run: |
+          set -euxo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/bundle/darwin/arm64 dist/bundle/darwin/amd64 dist/bundle/darwin/universal
+          cp dist/apple-mail-mcp-darwin-arm64 dist/bundle/darwin/arm64/apple-mail-mcp
+          cp dist/apple-mail-mcp-darwin-amd64 dist/bundle/darwin/amd64/apple-mail-mcp
+          cp dist/apple-mail-mcp-darwin-universal dist/bundle/darwin/universal/apple-mail-mcp
+          cat > dist/bundle/manifest.json <<'JSON'
+          {
+            "manifest_version": "1",
+            "name": "apple-mail",
+            "display_name": "Apple Mail MCP",
+            "version": "__VERSION__",
+            "description": "Programmatic Apple Mail access for MCP clients.",
+            "server": {
+              "type": "binary",
+              "entry_point": "darwin/universal/apple-mail-mcp",
+              "mcp_config": {
+                "command": "${__dirname}/darwin/universal/apple-mail-mcp",
+                "args": [],
+                "env": {
+                  "APPLE_MAIL_MCP_READ_ONLY": "${user_config.read_only}",
+                  "APPLE_MAIL_MCP_LOG_LEVEL": "${user_config.log_level}"
+                }
+              }
+            },
+            "user_config": {
+              "read_only": {
+                "type": "boolean",
+                "title": "Read-only mode",
+                "default": false,
+                "description": "Disable send_email, create_draft, and mark_as_read tools."
+              },
+              "log_level": {
+                "type": "string",
+                "title": "Log level",
+                "default": "info",
+                "enum": ["debug", "info", "warn", "error"],
+                "description": "Logging verbosity written to stderr."
+              }
+            }
+          }
+          JSON
+          sed -i '' "s/__VERSION__/${VERSION}/g" dist/bundle/manifest.json
+          (
+            cd dist/bundle
+            zip -r ../apple-mail-mcp.mcpb manifest.json darwin
+          )
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/apple-mail-mcp-darwin-arm64
+            dist/apple-mail-mcp-darwin-amd64
+            dist/apple-mail-mcp-darwin-universal
+            dist/SHA256SUMS
+            dist/apple-mail-mcp.mcpb
+            install.sh
