@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/maximbilan/apple-mail-mcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/maximbilan/apple-mail-mcp-go/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/maximbilan/apple-mail-mcp-go)](https://github.com/maximbilan/apple-mail-mcp-go/releases)
-[![License](https://img.shields.io/github/license/maximbilan/apple-mail-mcp-go)](LICENSE)
+[![License](https://img.shields.io/github/license/maximbilan/apple-mail-mcp-go?cacheSeconds=300)](https://github.com/maximbilan/apple-mail-mcp-go/blob/main/LICENSE)
 
 `apple-mail-mcp` is a Go Model Context Protocol (MCP) server for macOS that gives MCP-compatible assistants programmatic access to Mail.app for listing accounts/mailboxes, searching and reading messages, sending drafts/emails, and unread-count workflows.
 
