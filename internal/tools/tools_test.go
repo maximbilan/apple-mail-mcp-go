@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maximbilan/apple-mail-mcp/internal/mail"
+	"github.com/maximbilan/apple-mail-mcp-go/internal/mail"
 )
 
 type fakeMailClient struct {

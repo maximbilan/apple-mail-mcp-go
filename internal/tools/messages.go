@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/maximbilan/apple-mail-mcp/internal/mail"
+	"github.com/maximbilan/apple-mail-mcp-go/internal/mail"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

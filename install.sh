@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPO="maximbilan/apple-mail-mcp"
+REPO="maximbilan/apple-mail-mcp-go"
 BIN_NAME="apple-mail-mcp"
 INSTALL_DIR="$HOME/.local/bin"
 TARGET="$INSTALL_DIR/$BIN_NAME"

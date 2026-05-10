@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-apple-mail-mcp
+/apple-mail-mcp
 
 # Test binary, built with `go test -c`
 *.test

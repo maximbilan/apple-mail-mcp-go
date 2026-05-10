@@ -10,9 +10,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/maximbilan/apple-mail-mcp/internal/installer"
-	"github.com/maximbilan/apple-mail-mcp/internal/mail"
-	"github.com/maximbilan/apple-mail-mcp/internal/tools"
+	"github.com/maximbilan/apple-mail-mcp-go/internal/installer"
+	"github.com/maximbilan/apple-mail-mcp-go/internal/mail"
+	"github.com/maximbilan/apple-mail-mcp-go/internal/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
