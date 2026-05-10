@@ -122,7 +122,8 @@ go test ./tests/integration -tags=integration -v
 - Permission denied:
   - Re-check macOS Automation permissions for the process invoking the server.
 - AppleScript timeout:
-  - Increase timeout with `APPLE_MAIL_MCP_TIMEOUT` (e.g. `45s` or `60`).
+  - Open Mail.app, wait for sync to settle, then retry.
+  - Increase timeout with `APPLE_MAIL_MCP_TIMEOUT` (e.g. `120s` or `180`).
 - Config did not update:
   - Restart Claude Desktop and run `claude mcp list` for Claude Code.
 

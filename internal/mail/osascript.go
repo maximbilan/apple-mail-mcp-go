@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultTimeout = 30 * time.Second
+	defaultTimeout = 90 * time.Second
 	timeoutEnvVar  = "APPLE_MAIL_MCP_TIMEOUT"
 )
 
@@ -72,6 +72,9 @@ func (r *OsaScriptRunner) Run(ctx context.Context, script string) (string, error
 	if err == nil {
 		return strings.TrimSpace(string(output)), nil
 	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "", fmt.Errorf("osascript timeout after %s", timeout)
+	}
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -84,9 +87,6 @@ func (r *OsaScriptRunner) Run(ctx context.Context, script string) (string, error
 			execErr.Stderr = err.Error()
 		}
 		return "", execErr
-	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return "", fmt.Errorf("osascript timeout after %s", timeout)
 	}
 	return "", fmt.Errorf("run osascript: %w", err)
 }
