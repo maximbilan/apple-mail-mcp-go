@@ -1,7 +1,7 @@
 BINARY := apple-mail-mcp
 PKG := ./cmd/apple-mail-mcp
 
-.PHONY: build test lint install clean tools-docs
+.PHONY: build test lint install clean tools-docs update-local
 
 build:
 	go build -o $(BINARY) $(PKG)
@@ -20,3 +20,6 @@ clean:
 
 tools-docs:
 	go run ./cmd/apple-mail-mcp tools-docs
+
+update-local:
+	./scripts/update-local.sh

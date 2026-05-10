@@ -27,6 +27,12 @@ go.work.sum
 # env file
 .env
 
+# Local Go cache directories
+.tmp-go-cache/
+.gocache/
+.gomodcache/
+.gopath/
+
 # Editor/IDE
 # .idea/
 # .vscode/
