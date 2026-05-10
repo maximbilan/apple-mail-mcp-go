@@ -169,8 +169,24 @@ tell application "Mail"
 		if totalCount < maxIndex then set maxIndex to totalCount
 		repeat with i from 1 to maxIndex
 			set msg to item i of matches
-			set unixDate to (((date sent of msg) - epochDate) as integer) as text
-			set row to (id of msg as text) & fieldSep & (subject of msg as text) & fieldSep & (sender of msg as text) & fieldSep & unixDate & fieldSep & ((read status of msg) as text) & fieldSep & (name of mailbox of msg as text)
+			set unixDate to ""
+			try
+				set sentDate to date sent of msg
+				if sentDate is not missing value then
+					set unixDate to (((sentDate - epochDate) as integer) as text)
+				end if
+			on error
+				set unixDate to ""
+			end try
+			if unixDate is "" then
+				try
+					set recvDate to date received of msg
+					if recvDate is not missing value then
+						set unixDate to (((recvDate - epochDate) as integer) as text)
+					end if
+				end try
+			end if
+			set row to (id of msg as text) & fieldSep & (subject of msg as text) & fieldSep & (sender of msg as text) & fieldSep & unixDate & fieldSep & ((read status of msg) as text) & fieldSep & mailboxName
 			set end of rows to row
 		end repeat
 	end if

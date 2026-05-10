@@ -57,6 +57,8 @@ func TestBuildSearchMessagesScriptIncludesFilters(t *testing.T) {
 		`subject of it contains "invoice"`,
 		`read status of it is false`,
 		`every message of targetMailbox whose`,
+		`set row to (id of msg as text)`,
+		`& fieldSep & mailboxName`,
 		`repeat with i from 1 to (count of rows)`,
 		`return outText`,
 	}
